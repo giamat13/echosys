@@ -57,12 +57,13 @@ Creature.prototype.update = function (dt, world, sim) {
   //  - a fully-aquatic body stranded on dry land suffocates
   const depth = world.waterDepthAt(this.x, this.y); // 0 land .. 1 deep sea
   const over = depth - this.aquatic;                // >0 => beyond what its DNA can handle
+  const landOver = depth === 0 ? this.aquatic - 0.6 : -1; // >0 => gills stranded on dry land
   this.drowning = 0; this.stranded = false;
   if (over > 0) {
-    this.energy -= (0.35 + over * 2.8) * dt;        // rapid, depth-scaled drowning
+    this.energy -= (0.35 + over * 2.8) * dt;         // rapid, depth-scaled drowning
     this.drowning = over;
-  } else if (depth === 0 && this.aquatic > 0.75) {
-    this.energy -= (this.aquatic - 0.75) * 0.8 * dt; // gilled body gasping on land
+  } else if (landOver > 0) {
+    this.energy -= (0.35 + landOver * 2.8) * dt;      // equally rapid stranding
     this.stranded = true;
   }
 
@@ -80,10 +81,10 @@ Creature.prototype.update = function (dt, world, sim) {
   const danger = (px, py) => {
     const d = world.waterDepthAt(px, py);
     let bad = Math.max(0, d - this.aquatic);
-    if (d === 0 && this.aquatic > 0.75) bad += (this.aquatic - 0.75);
+    if (d === 0) bad += Math.max(0, this.aquatic - 0.6);
     return bad;
   };
-  const hereBad = Math.max(this.drowning, this.stranded ? this.aquatic - 0.75 : 0);
+  const hereBad = Math.max(this.drowning, this.stranded ? landOver : 0);
 
   // ---- Perception & target selection ----
   let tx = null, ty = null; this.prey = null;
@@ -111,7 +112,7 @@ Creature.prototype.update = function (dt, world, sim) {
   }
   // Survival instinct: steer toward whichever side is safer (flee the sea /
   // scramble back to water) when the current or upcoming ground is lethal.
-  if (hereBad > 0 || this.aquatic > 0.75) {
+  if (hereBad > 0 || this.aquatic > 0.6) {
     const probe = 30;
     const F = danger(this.x + Math.cos(this.dir) * probe, this.y + Math.sin(this.dir) * probe);
     const L = danger(this.x + Math.cos(this.dir - 0.7) * probe, this.y + Math.sin(this.dir - 0.7) * probe);
@@ -141,9 +142,13 @@ Creature.prototype.update = function (dt, world, sim) {
       sim.kills++;
     }
   }
-  if (this.diet < 0.72) { // herbivores & omnivores graze
-    const got = world.eatAt(this.x, this.y, 0.03 * dt * (1 + this.radius * 0.04));
-    this.energy += got * 60;
+  if (this.diet < 0.72) { // herbivores & omnivores graze, but only in a medium their body suits
+    const landHere = depth === 0 ? 1 : 0;
+    const grazeEff = Util.clamp(1 - Math.abs(landHere - this.aquatic) * 1.4, 0, 1);
+    if (grazeEff > 0) {
+      const got = world.eatAt(this.x, this.y, 0.03 * dt * (1 + this.radius * 0.04) * grazeEff);
+      this.energy += got * 60;
+    }
   }
   if (this.energy > this.maxEnergy) this.energy = this.maxEnergy;
 

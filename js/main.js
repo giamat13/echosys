@@ -17,7 +17,7 @@
     fit();
     world = new World(cols, rows, TILE);
     sim = new Simulation(world);
-    sim.spawnRandom(45);
+    sim.spawnRandom(2);
     ui = new UI(sim, world, canvas);
   }
 

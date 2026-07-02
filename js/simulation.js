@@ -19,7 +19,29 @@ function Simulation(world) {
   this._prevTemp = Params.temperature;
   this._prevSea = Params.seaLevel;
   this.volatility = 0; // smoothed measure of how fast the climate is shifting
+  this.pin = {};        // paramName -> sim-clock tick until which auto-drift is suppressed
 }
+
+const PIN_TICKS = 3000; // ~ how long a manually-touched leaf slider resists auto-drift
+
+// Called by the UI whenever the player drags a climate slider by hand. The
+// dragged value is authoritative: coupled sliders move to match IT, never
+// the reverse. temperature <-> seaLevel have a clean physical inverse, so
+// dragging either one snaps the other into self-consistency immediately.
+// foodRegen/mutation are pure effects with no clean inverse, so a manual
+// edit is simply protected from auto-drift for a while instead.
+Simulation.prototype.userSetClimate = function (id, value) {
+  Params[id] = value;
+  if (id === 'temperature') {
+    this.baseTemp = value;
+  } else if (id === 'seaLevel') {
+    const T = Util.clamp(0.5 + (0.46 - value) / 0.6, 0, 1);
+    Params.temperature = T;
+    this.baseTemp = T;
+  } else {
+    this.pin[id] = this.climateClock + PIN_TICKS;
+  }
+};
 
 // Environmental feedback: every fitting metric drifts naturally, coupled to
 // the others, instead of staying at a fixed value.
@@ -34,22 +56,27 @@ Simulation.prototype.updateClimate = function (dt) {
   const T = Params.temperature;
 
   // 1) Heat evaporates the sea; cold lets it rise (toward a temp-driven target).
+  //    (Self-consistent after a manual seaLevel edit, so no pin needed here.)
   const seaTarget = Util.clamp(0.46 - (T - 0.5) * 0.6, 0.05, 0.72);
   Params.seaLevel += (seaTarget - Params.seaLevel) * 0.006 * dt;
 
   // 2) Productivity: richest in a temperate, moist world; barren at extremes.
-  const warmth = 1 - Math.abs(T - 0.5) * 1.4;          // bell curve, peak temperate
-  const moisture = 0.4 + Params.seaLevel * 0.9;        // more sea -> more rain
-  const foodTarget = Util.clamp(warmth * moisture * 1.1, 0.05, 1.5);
-  Params.foodRegen += (foodTarget - Params.foodRegen) * 0.005 * dt;
+  if (this.climateClock > (this.pin.foodRegen || 0)) {
+    const warmth = 1 - Math.abs(T - 0.5) * 1.4;          // bell curve, peak temperate
+    const moisture = 0.4 + Params.seaLevel * 0.9;        // more sea -> more rain
+    const foodTarget = Util.clamp(warmth * moisture * 1.1, 0.05, 1.5);
+    Params.foodRegen += (foodTarget - Params.foodRegen) * 0.005 * dt;
+  }
 
   // 3) Climate volatility drives mutation (stress-induced mutagenesis):
   //    rapid change accelerates adaptation, long stability calms the genome.
   const flux = Math.abs(T - this._prevTemp) + Math.abs(Params.seaLevel - this._prevSea);
   this._prevTemp = T; this._prevSea = Params.seaLevel;
   this.volatility = this.volatility * 0.996 + flux;
-  const mutTarget = Util.clamp(0.05 + this.volatility * 0.7, 0.03, 0.3);
-  Params.mutation += (mutTarget - Params.mutation) * 0.08 * dt;
+  if (this.climateClock > (this.pin.mutation || 0)) {
+    const mutTarget = Util.clamp(0.05 + this.volatility * 0.7, 0.03, 0.3);
+    Params.mutation += (mutTarget - Params.mutation) * 0.08 * dt;
+  }
 };
 
 // Assign a creature to the nearest genetic cluster, or found a new species.

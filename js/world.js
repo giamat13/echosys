@@ -77,14 +77,16 @@ World.prototype.fertility = function (i) {
   return Util.clamp(tempComfort * moisture * 1.2, 0, 1);
 };
 
-// Plant/plankton growth each simulation step.
+// Plant/plankton growth each simulation step. foodRegen scales the ceiling
+// itself (not just the growth rate) so 0% abundance means zero food, full
+// stop — standing food actually dies off instead of freezing near capacity.
 World.prototype.grow = function (dt) {
-  const n = this.cols * this.rows, k = Params.foodRegen * 0.012 * dt;
+  const n = this.cols * this.rows, k = 0.012 * dt;
   for (let i = 0; i < n; i++) {
     if (this.rock[i]) { this.food[i] = 0; continue; }
-    const cap = this.fertility(i);
+    const cap = this.fertility(i) * Params.foodRegen;
     if (this.food[i] < cap) this.food[i] = Math.min(cap, this.food[i] + k * (0.2 + cap));
-    else this.food[i] *= 0.999;
+    else this.food[i] += (cap - this.food[i]) * 0.02 * dt;
   }
 };
 

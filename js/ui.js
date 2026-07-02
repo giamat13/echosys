@@ -12,14 +12,23 @@ function UI(sim, world, canvas) {
 }
 
 UI.prototype._bindParams = function () {
-  const map = ['temperature', 'seaLevel', 'foodRegen', 'mutation', 'simSpeed', 'brush'];
-  for (const id of map) {
+  const climateIds = ['temperature', 'seaLevel', 'foodRegen', 'mutation'];
+  for (const id of climateIds) {
     const el = document.getElementById(id);
     el.addEventListener('input', () => {
-      Params[id] = parseFloat(el.value);
-      if (id === 'temperature') this.sim.baseTemp = Params.temperature; // seasonal set-point
+      // Dragging a slider makes it authoritative: coupled sliders move to
+      // match it, it never gets silently pulled back to match them.
+      this.sim.userSetClimate(id, parseFloat(el.value));
+      // userSetClimate may change a *sibling* Param directly in JS (e.g.
+      // seaLevel -> temperature); push that onto its slider's visual
+      // position too, or the handle stays stuck while the label updates.
+      for (const k of climateIds) if (k !== id) document.getElementById(k).value = Params[k];
       this.refreshOutputs();
     });
+  }
+  for (const id of ['simSpeed', 'brush']) {
+    const el = document.getElementById(id);
+    el.addEventListener('input', () => { Params[id] = parseFloat(el.value); this.refreshOutputs(); });
   }
   document.getElementById('autoseed').addEventListener('change', e => { Params.autoseed = e.target.checked; });
   document.getElementById('dynamic').addEventListener('change', e => { Params.dynamicClimate = e.target.checked; });
@@ -104,7 +113,8 @@ UI.prototype._bindButtons = function () {
     this.sim.history.length = 0;
     this.sim.species.length = 0;
     this.sim.nextSpecies = 1;
-    this.sim.spawnRandom(40);
+    this.sim.pin = {};
+    this.sim.spawnRandom(2);
   });
   document.getElementById('burstBtn').addEventListener('click', () => this.sim.spawnRandom(25));
 };
