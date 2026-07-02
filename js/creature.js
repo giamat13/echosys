@@ -50,17 +50,40 @@ Creature.prototype.update = function (dt, world, sim) {
   // Metabolism: basal cost, cheaper for efficient creatures.
   const eff = 1 - g.metabolism * 0.45;
   let cost = (0.05 + this.radius * 0.006) * eff * dt;
-
-  // Climate stress: living outside your thermal comfort burns energy.
-  const tdiff = Math.abs(Params.temperature - this.optTemp);
-  if (tdiff > this.tempTol) cost += (tdiff - this.tempTol) * 1.6 * dt;
-
-  // Wrong medium (land beast in deep sea, or fish stranded) is exhausting.
-  const onWater = world.isWaterAt(this.x, this.y);
-  const mismatch = Math.abs((onWater ? 1 : 0) - this.aquatic);
-  if (mismatch > 0.5) cost += 0.09 * dt;
-
   this.energy -= cost;
+
+  // Medium survival: a body must match its surroundings or it dies.
+  //  - a land-dweller out of its depth in the sea DROWNS (worse when deep / less aquatic)
+  //  - a fully-aquatic body stranded on dry land suffocates
+  const depth = world.waterDepthAt(this.x, this.y); // 0 land .. 1 deep sea
+  const over = depth - this.aquatic;                // >0 => beyond what its DNA can handle
+  this.drowning = 0; this.stranded = false;
+  if (over > 0) {
+    this.energy -= (0.35 + over * 2.8) * dt;        // rapid, depth-scaled drowning
+    this.drowning = over;
+  } else if (depth === 0 && this.aquatic > 0.75) {
+    this.energy -= (this.aquatic - 0.75) * 0.8 * dt; // gilled body gasping on land
+    this.stranded = true;
+  }
+
+  // Climate fit: anything living outside its thermal tolerance dies, fast if
+  // the mismatch is severe. Deep water buffers the body from air extremes
+  // (real oceans have thermal inertia), so submerging is a valid escape.
+  const buffer = depth * 0.6;
+  const effectiveTemp = Util.lerp(Params.temperature, 0.5, buffer);
+  const tdiff = Math.abs(effectiveTemp - this.optTemp);
+  const excess = Math.max(0, tdiff - this.tempTol);
+  this.exposure = excess;
+  if (excess > 0) this.energy -= (excess * 1.1 + excess * excess * 9) * dt;
+
+  // How dangerous is a point for THIS body? (used for steering below)
+  const danger = (px, py) => {
+    const d = world.waterDepthAt(px, py);
+    let bad = Math.max(0, d - this.aquatic);
+    if (d === 0 && this.aquatic > 0.75) bad += (this.aquatic - 0.75);
+    return bad;
+  };
+  const hereBad = Math.max(this.drowning, this.stranded ? this.aquatic - 0.75 : 0);
 
   // ---- Perception & target selection ----
   let tx = null, ty = null; this.prey = null;
@@ -86,15 +109,17 @@ Creature.prototype.update = function (dt, world, sim) {
   } else {
     this.dir += Util.rand(-0.25, 0.25) * dt;
   }
-  // Bias toward preferred medium when strongly mismatched.
-  if (mismatch > 0.5) {
-    const probe = 22;
-    const ahead = world.isWaterAt(this.x + Math.cos(this.dir) * probe, this.y + Math.sin(this.dir) * probe);
-    if (Math.abs((ahead ? 1 : 0) - this.aquatic) > Math.abs((onWater ? 1 : 0) - this.aquatic))
-      this.dir += 0.3 * dt; // turn away from getting deeper into wrong medium
+  // Survival instinct: steer toward whichever side is safer (flee the sea /
+  // scramble back to water) when the current or upcoming ground is lethal.
+  if (hereBad > 0 || this.aquatic > 0.75) {
+    const probe = 30;
+    const F = danger(this.x + Math.cos(this.dir) * probe, this.y + Math.sin(this.dir) * probe);
+    const L = danger(this.x + Math.cos(this.dir - 0.7) * probe, this.y + Math.sin(this.dir - 0.7) * probe);
+    const R = danger(this.x + Math.cos(this.dir + 0.7) * probe, this.y + Math.sin(this.dir + 0.7) * probe);
+    if (F > hereBad || F > 0.02) this.dir += (L < R ? -1 : 1) * (0.6 + F * 1.5) * dt;
   }
 
-  const drive = this.maxSpeed * (hungry && tx !== null ? 1 : 0.55) * (mismatch > 0.5 ? 0.6 : 1);
+  const drive = this.maxSpeed * (hungry && tx !== null ? 1 : 0.55) * (hereBad > 0 ? 0.5 : 1);
   const step = drive * 1.7 * dt;
   let nx = this.x + Math.cos(this.dir) * step;
   let ny = this.y + Math.sin(this.dir) * step;
@@ -251,6 +276,33 @@ Creature.prototype.draw = function (ctx) {
   ctx.arc(this.radius * 0.8, -this.radius * 0.22, Math.max(1.4, this.radius * 0.18), 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
+
+  // Drowning / stranding distress: bubbles + coloured ring.
+  if (this.drowning > 0 || this.stranded) {
+    const col = this.drowning > 0 ? 'rgba(120,190,255,' : 'rgba(255,170,90,';
+    ctx.strokeStyle = col + '.85)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius * 1.8, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = col + '.7)';
+    for (let b = 0; b < 3; b++) {
+      const ph = (this.wobble * 0.5 + b * 2) % 3;
+      ctx.beginPath();
+      ctx.arc(this.x + (b - 1) * this.radius * 0.5, this.y - this.radius - ph * 6, 1.5 + b * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Climate-exposure distress: red shimmer for heatstroke, cyan frost for cold.
+  if (this.exposure > 0.01) {
+    const tooHot = Params.temperature > this.optTemp;
+    ctx.strokeStyle = tooHot ? 'rgba(255,90,60,.8)' : 'rgba(160,225,255,.85)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius * 2.2, 0, Math.PI * 2);
+    ctx.stroke();
+  }
 
   // Low-energy indicator ring.
   if (this.energy < this.maxEnergy * 0.22) {

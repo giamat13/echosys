@@ -46,6 +46,15 @@ World.prototype.isWaterAt = function (px, py) {
   if (!this.inBounds(cx, cy)) return false;
   return this.elev[this.idx(cx, cy)] < Params.seaLevel;
 };
+// 0 on land, up to 1 in the deepest sea (relative to current sea level).
+World.prototype.waterDepthAt = function (px, py) {
+  const cx = (px / this.tile) | 0, cy = (py / this.tile) | 0;
+  if (!this.inBounds(cx, cy)) return 0;
+  const e = this.elev[this.idx(cx, cy)];
+  if (e >= Params.seaLevel) return 0;
+  return Util.clamp((Params.seaLevel - e) / Math.max(0.01, Params.seaLevel), 0, 1);
+};
+
 World.prototype.isRockAt = function (px, py) {
   const cx = (px / this.tile) | 0, cy = (py / this.tile) | 0;
   if (!this.inBounds(cx, cy)) return true; // treat OOB as solid wall
