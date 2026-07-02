@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Echosysim · סימולטור אקו-אבולוציוני</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div id="app">
+  <aside id="panel">
+    <h1>Echosysim</h1>
+    <p class="tag">אתה לא שולט ביצורים — אתה מעצב את העולם.</p>
+
+    <section class="group">
+      <h2>סביבה</h2>
+      <label>טמפרטורה <span data-out="temperature"></span>
+        <input type="range" id="temperature" min="0" max="1" step="0.01" value="0.5" />
+      </label>
+      <label>מפלס ים <span data-out="seaLevel"></span>
+        <input type="range" id="seaLevel" min="0" max="0.75" step="0.01" value="0.34" />
+      </label>
+      <label>שפע מזון <span data-out="foodRegen"></span>
+        <input type="range" id="foodRegen" min="0" max="1.5" step="0.01" value="0.6" />
+      </label>
+      <label class="check"><input type="checkbox" id="dynamic" checked /> אקלים דינמי · חום מוריד את מפלס הים</label>
+      <label class="check"><input type="checkbox" id="seasons" /> עונות · הטמפרטורה מתנודדת לאורך זמן</label>
+    </section>
+
+    <section class="group">
+      <h2>אבולוציה</h2>
+      <label>קצב מוטציה <span data-out="mutation"></span>
+        <input type="range" id="mutation" min="0" max="0.35" step="0.005" value="0.09" />
+      </label>
+      <label>מהירות סימולציה <span data-out="simSpeed"></span>
+        <input type="range" id="simSpeed" min="1" max="5" step="1" value="1" />
+      </label>
+      <label class="check"><input type="checkbox" id="autoseed" checked /> זריעה אוטומטית כשהחיים גוועים</label>
+    </section>
+
+    <section class="group">
+      <h2>כלי עריכה (גרור על העולם)</h2>
+      <div class="tools">
+        <button class="tool active" data-tool="none">👁 צפייה</button>
+        <button class="tool" data-tool="water">💧 מים</button>
+        <button class="tool" data-tool="land">⛰ יבשה</button>
+        <button class="tool" data-tool="food">🌿 מזון</button>
+        <button class="tool" data-tool="rock">🪨 מכשול</button>
+        <button class="tool" data-tool="spawn">🥚 זריעת יצור</button>
+      </div>
+      <label>גודל מברשת <span data-out="brush"></span>
+        <input type="range" id="brush" min="1" max="8" step="1" value="3" />
+      </label>
+    </section>
+
+    <section class="group actions">
+      <button id="playBtn">⏸ השהה</button>
+      <button id="reseedBtn">🔄 עולם חדש</button>
+      <button id="burstBtn">✨ 25 יצורים</button>
+    </section>
+
+    <section class="group stats">
+      <h2>מדדים חיים</h2>
+      <div id="readout"></div>
+      <canvas id="chart" width="300" height="120"></canvas>
+    </section>
+
+    <section class="group inspector">
+      <h2>DNA · רחף מעל יצור</h2>
+      <div id="dna">— אין יצור נבחר —</div>
+    </section>
+  </aside>
+
+  <main id="stage">
+    <canvas id="world"></canvas>
+    <div id="hint">ציר גרירה כדי לפסל את העולם · רחף מעל יצור כדי לקרוא את ה-DNA שלו</div>
+  </main>
+</div>
+
+<script src="js/util.js"></script>
+<script src="js/genome.js"></script>
+<script src="js/world.js"></script>
+<script src="js/creature.js"></script>
+<script src="js/simulation.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
